@@ -96,7 +96,6 @@ void readFiles(const vector<string> &fileNames, uint8_t *input_data_host)
         uint8_t *fileData = &(input_data_host[offset]);
         infile.read(reinterpret_cast<char*>(fileData), vol);
         offset += (h * w);
-        //// Print an ascii representation
         //cout << "Input:\n";
         //for (size_t i = 0; i < vol; i++)
         //{
@@ -125,6 +124,13 @@ int64_t volume(const nvinfer1::Dims& d)
     return std::accumulate(d.d, d.d + d.nbDims, 1, std::multiplies<int64_t>());
 }
 
+void print_dimensione_val(const Dims &val)
+{
+    for (int i = 0; i < val.nbDims; i++){
+        cout<<val.d[i]<<" ";
+    }
+    cout<<endl;
+}
 
 int main()
 {
@@ -170,6 +176,10 @@ int main()
     readFiles(fileNames, input_data);
 
     auto context = engine->createExecutionContext();
+    cudaStream_t stream;
+    ck(cudaStreamCreate(&stream));
+    context->setOptimizationProfile(0);
+    //context->setOptimizationProfileAsync(0, stream);
     Dims4 inputDims2{batchSize, 1, inputSize_H, inputSize_W};
     //cout<<engine->getBindingDimensions(0).nbDims<<endl;
     //cout<<engine->getBindingDimensions(1).nbDims<<endl;
@@ -197,8 +207,6 @@ int main()
         input_data_host[i] = static_cast<float>(input_data[i]);
     }
 
-    cudaStream_t stream;
-    ck(cudaStreamCreate(&stream));
     ck(cudaMemcpyAsync(buffer[0], input_data_host, input_size * getElementSize(dataTypeInput), cudaMemcpyHostToDevice, stream));
     //print_device(buffer[0], input_size);
     //cudaStreamSynchronize(stream);
