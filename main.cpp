@@ -20,13 +20,15 @@
 #include <cassert>
 #include <stdexcept>
 #include "print_array.h"
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
 
 using namespace nvinfer1;
 using namespace std;
 
 #define ck(call) check(call, __LINE__, __FILE__)
-const int inputSize_H = 28;
-const int inputSize_W = 28;
+int inputSize_H = 28;
+int inputSize_W = 28;
 
 const std::string onnxFile {"./model.onnx"};
 const std::string trtFile {"./model.plan"};
@@ -96,12 +98,12 @@ void readFiles(const vector<string> &fileNames, uint8_t *input_data_host)
         uint8_t *fileData = &(input_data_host[offset]);
         infile.read(reinterpret_cast<char*>(fileData), vol);
         offset += (h * w);
-        //cout << "Input:\n";
-        //for (size_t i = 0; i < vol; i++)
-        //{
-        //    cout << (" .:-=+*#%@"[fileData[i] / 26]) << (((i + 1) % w) ? "" : "\n");
-        //}
-        //cout << std::endl; 
+        cout << "Input:\n";
+        for (size_t i = 0; i < vol; i++)
+        {
+            cout << (" .:-=+*#%@"[fileData[i] / 26]) << (((i + 1) % w) ? "" : "\n");
+        }
+        cout << std::endl; 
     }
 }
 
@@ -155,25 +157,30 @@ int main()
     profile->setDimensions(inputTensor->getName(), OptProfileSelector::kMAX, Dims4{16, 1, 28, 28});
     config->addOptimizationProfile(profile);
     
-    network->unmarkOutput(*network->getOutput(0)); //?
+    network->unmarkOutput(*network->getOutput(0));
     auto engine = builder->buildEngineWithConfig(*network, *config);
     network->destroy();
     builder->destroy();
 
     vector<string> fileNames;
-    fileNames.push_back("../MNIST/0.pgm");
-    fileNames.push_back("../MNIST/1.pgm");
-    fileNames.push_back("../MNIST/2.pgm");
-    fileNames.push_back("../MNIST/3.pgm");
-    fileNames.push_back("../MNIST/4.pgm");
-    fileNames.push_back("../MNIST/5.pgm");
-    fileNames.push_back("../MNIST/6.pgm");
-    fileNames.push_back("../MNIST/7.pgm");
-    fileNames.push_back("../MNIST/8.pgm");
-    fileNames.push_back("../MNIST/9.pgm");
+    fileNames.push_back("./0.jpg");
+    fileNames.push_back("./1.jpg");
+    fileNames.push_back("./2.jpg");
+    fileNames.push_back("./3.jpg");
+    fileNames.push_back("./4.jpg");
+    fileNames.push_back("./5.jpg");
+    fileNames.push_back("./6.jpg");
+    fileNames.push_back("./7.jpg");
+    fileNames.push_back("./8.png");
+    fileNames.push_back("./9.jpg");
     int batchSize = fileNames.size();
-    uint8_t *input_data = (uint8_t *)malloc(batchSize * inputSize_H * inputSize_W);
-    readFiles(fileNames, input_data);
+    vector<unsigned char *>input_data; 
+    int inputChannel = 0;
+    for (int i = 0; i < batchSize; i++){
+         unsigned char *data = stbi_load(fileNames[i].c_str(), &inputSize_H, &inputSize_W, &inputChannel, 0);
+         input_data.emplace_back(data);
+    }
+    cout<<"image size = "<<inputChannel<<" "<<inputSize_H<<" "<<inputSize_W<<endl;
 
     auto context = engine->createExecutionContext();
     cudaStream_t stream;
@@ -181,8 +188,8 @@ int main()
     context->setOptimizationProfile(0);
     //context->setOptimizationProfileAsync(0, stream);
     Dims4 inputDims2{batchSize, 1, inputSize_H, inputSize_W};
-    //cout<<engine->getBindingDimensions(0).nbDims<<endl;
-    //cout<<engine->getBindingDimensions(1).nbDims<<endl;
+    cout<<"input dims of engine = ";
+    print_dimensione_val(engine->getBindingDimensions(0));
     context->setBindingDimensions(0, inputDims2);
 
     // alloc device and host memory
@@ -203,13 +210,13 @@ int main()
     int *out_data_host = nullptr;
     ck(cudaMallocHost((void **)&input_data_host, input_size * getElementSize(dataTypeInput)));
     ck(cudaMallocHost((void **)&out_data_host, output_size * getElementSize(dataTypeOutput)));
-    for (int i = 0; i < batchSize * inputSize_H * inputSize_W; i++){
-        input_data_host[i] = static_cast<float>(input_data[i]);
+    for (int i = 0; i < batchSize; i++){
+        for (int j = 0; j < inputSize_H * inputSize_W; j++){
+            input_data_host[i * inputSize_H * inputSize_W + j] = static_cast<float>(input_data[i][j]);
+        }
     }
 
     ck(cudaMemcpyAsync(buffer[0], input_data_host, input_size * getElementSize(dataTypeInput), cudaMemcpyHostToDevice, stream));
-    //print_device(buffer[0], input_size);
-    //cudaStreamSynchronize(stream);
     context->enqueueV2(buffer.data(), stream, nullptr);
     ck(cudaMemcpyAsync(out_data_host, buffer[1], output_size * getElementSize(dataTypeOutput), cudaMemcpyDeviceToHost, stream));
     cudaStreamSynchronize(stream);
