@@ -27,8 +27,9 @@ using namespace nvinfer1;
 using namespace std;
 
 #define ck(call) check(call, __LINE__, __FILE__)
-int inputSize_H = 28;
-int inputSize_W = 28;
+int inputChannel = 0;
+int inputSize_H = 0;
+int inputSize_W = 0;
 
 const std::string onnxFile {"./model.onnx"};
 const std::string trtFile {"./model.plan"};
@@ -175,7 +176,6 @@ int main()
     fileNames.push_back("./9.jpg");
     int batchSize = fileNames.size();
     vector<unsigned char *>input_data; 
-    int inputChannel = 0;
     for (int i = 0; i < batchSize; i++){
          unsigned char *data = stbi_load(fileNames[i].c_str(), &inputSize_H, &inputSize_W, &inputChannel, 0);
          input_data.emplace_back(data);
